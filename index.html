@@ -213,10 +213,13 @@
             var start_date_t = new Date(document.getElementById('start_date').value);
             var end_date_t = new Date(document.getElementById('end_date').value);
             var time_granularity_t = document.getElementById("time_granularity").value;
+            
 
             if ((start_date_t.getTime() != start_date.getTime())
                    || (end_date_t.getTime() != end_date.getTime())) {
                 // compute the new points between start and end dates 
+                start_date = start_date_t;
+                end_date = end_date_t;
                 get_points(start_date_t, end_date_t);
                 total_positions = crt_data_rows.length;
                 crt_start_position = total_positions - 1;
@@ -232,8 +235,6 @@
                 update_slider(); 
             }
 
-            start_date = start_date_t;
-            end_date = end_date_t;
 
             filter_start_date = start_date;
             filter_end_date = end_date;
@@ -278,11 +279,15 @@
                 case "hour":
                     g = function(d){d_t = d["Event Clearance Date"]; return d_t;};
             }
+            console.log(crt_data_rows.length);
+            console.log(data_rows.length);
             crt_sum_points = d3.nest()
                                .key(g) // `GROUP BY date`
                                .rollup(function(values){
                                            return values.length;})
                                .entries(crt_data_rows);
+            console.log(data_rows.length);
+            console.log(crt_data_rows.length);
         }
 
   
@@ -408,26 +413,25 @@
   </head>
 
   <body>
-      <table width="1500px" border="0">
+      <table width="1000px" border="0">
           <tr>
               <td colspan="2" style="background-color:#FFA500;">
                   <h1>911 Calls - Seattle</h1>
-                  <div id="panel">
-                      <button onclick="toggleHeatmap()">Toggle Heatmap</button>
-                      <button onclick="changeGradient()">Change gradient</button>
-                      <button onclick="changeRadius()">Change radius</button>
-                      <button onclick="changeOpacity()">Change opacity</button>
-                  </div>
               </td>
           </tr>
 
           <tr>
-              <td style="background-color:#FFD700;width:400px; height:500px">
+              <td style="background-color:#FFD700;width:700px; height:500px">
                   <div id="map-canvas" style="width:90%; height:100%"></div>
               </td>
-              <td style="background-color:#EEEEEE;height:200px;width:400px;">
+              <td style="background-color:#EEEEEE;height:300px;width:400px;">
                         <form name="updates" action="javascript:update()">
-	  		    Start date:<br>
+                                <button onclick="changeGradient()">Change gradient</button>
+                                <button onclick="changeRadius()">Change radius</button>
+                                <button onclick="changeOpacity()">Change opacity</button>
+	  		    <br><br><br><br>
+	  		    <br><br><br><br>
+                            Start date:<br>
 	  		    <input type="text" id="start_date" name = "Start date" maxlength="25" size="25"><a href="javascript:NewCal('start_date','ddmmmyyyy',true,24)"><img src="images/cal.gif" width="16" height="16" border="0" alt="Pick a date"></a><br>
 	  		    <br>
                             End date:<br>
@@ -439,13 +443,6 @@
                                 <option value="month" selected > Month</option>
                             </select>
                             <br><br>
-                            Show only:
-                            <br>
-                            <input type="checkbox" name="Traffic related calls" value="Traffic">Traffic related calls<br>
-                            <input type="checkbox" name="Suspicious circumstances" value="Suspicious">Suspicious circumstances<br>
-                            <input type="checkbox" name="Other" value="Other">Other<br>
-                            <input type="checkbox" name="All" value="All">All<br>
-                            <br>
                             <input type="hidden" name="Submit" id="submit" value="Update" />
                         </form>
               </td>
