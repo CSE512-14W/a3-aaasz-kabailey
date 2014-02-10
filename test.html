@@ -21,6 +21,11 @@
         border: 1px solid #999;
       }
 
+      .area {
+          fill: steelblue;i
+          clip-path: url(#clip);
+      }
+
       .axis {
           font: 10px sans-serif;
           -webkit-user-select: none;
@@ -36,19 +41,17 @@
           stroke-linecap: round;
       }
 
-      .axis .halo {
+      .axis path,
+      .axis line {
           fill: none;
-          stroke: #ddd;
-          stroke-width: 8px;
-          stroke-linecap: round;
-      }
-
-      .slider .handle {
-          fill: #fff;
           stroke: #000;
-          stroke-opacity: .5;
-          stroke-width: 1.25px;
-          pointer-events: none;
+          shape-rendering: crispEdges;
+      }
+ 
+      .slider .extent {
+          stroke: #fff;
+          fill-opacity: .125;
+          shape-rendering: crispEdges;
       }
 
 
@@ -58,15 +61,18 @@
     <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false&libraries=visualization"></script>
     
     <script>
-        var margin = {top: 200, right: 50, bottom: 200, left: 50},
-            width = 960 - margin.left - margin.right,
-            height = 500 - margin.bottom - margin.top;
+        var margin = {top: 50, right: 50, bottom: 50, left: 50},
+            width = 900 - margin.left - margin.right,
+            height = 200 - margin.bottom - margin.top;
         var map;
         var heatmap;
-        var filter_date = new Date("1960-01-01");
+        var filter_start_date;
+        var filter_end_date;
+        var heatmap_data;
         var heatmap_data;
         var slider, handle, svg;
-        var crt_position;
+        var crt_start_position;
+        var crt_end_position;
         var total_positions;
 
         // info about the current choices in displaying the data
@@ -78,60 +84,79 @@
         //
 
         var data_rows;
-        var x = d3.time
-                  .scale()
-                  .range([0, width])
-                  .clamp(true);
+
+        // define scales for the chart under the map
+        var x = d3.time.scale().range([0, width]).clamp(true);
+        var y = d3.scale.linear().range([height, 0]);
+
+        var xAxis = d3.svg.axis()
+                          .scale(x)
+                          .orient("bottom");
+
+        var yAxis = d3.svg.axis().scale(y).orient("left"); 
+
+        var area = d3.svg.area()
+                         .interpolate("monotone")
+                         .x(function(d) { return x(new Date(d.key)); })
+                         .y0(height)
+                         .y1(function(d) { return y(d.values); }); 
 
         var brush = d3.svg.brush()
                       .x(x)
-                      .extent([0, 0])
                       .on("brush", brushed);
                 
 
         window.onload = function () {
-            d3.csv("data_200000.csv", parse_types, function(error, data) {
+            d3.csv("data_100000.csv", parse_types, function(error, data) {
                 data_rows = data;
+                
+                var limits = d3.extent(data_rows, function(d) { return d["Event Clearance Date"]; });
+                start_date = limits[0];
+                end_date = limits[1];
+
                 // data is sorted - most recent in pos 0
                 total_positions = data_rows.length;
-                crt_position = total_positions - 1;
                 
-                x.domain(d3.extent(data_rows, function(d) { return d["Event Clearance Date"]; }))
+                // initialize cureent state
+                crt_start_position = total_positions - 1;
+                crt_end_position = 0;
 
-                svg = d3.select("#slider").append("svg")
+                crt_data_rows = data; 
+                get_points_by_granularity("month");  
+                
+                filter_start_date = start_date;
+                filter_end_date = end_date;
+
+                x.domain(limits);
+                y.domain(d3.extent(crt_sum_points, function(d){return d.values}));
+
+                var svg = d3.select("#slider").append("svg")
                             .attr("width", width + margin.left + margin.right)
                             .attr("height", height + margin.top + margin.bottom)
                             .append("g")
                             .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
                 svg.append("g")
+                   .append("path")
+                   .attr("class", "area")
+                   .attr("d", area(crt_sum_points));
+                
+                svg.append("g")
                    .attr("class", "x axis")
-                   .attr("transform", "translate(0," + height / 2 + ")")
-                   .call(d3.svg.axis()
-                               .scale(x)
-                               .orient("bottom")
-                               .tickFormat(d3.time.format('%b %Y'))
-                               .tickSize(0)
-                               .tickPadding(12))
-                   .select(".domain")
-                   .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
-                   .attr("class", "halo");
+                   .attr("transform", "translate(0," + height + ")")
+                   .call(xAxis);
+                
+                svg.append("g")
+                   .attr("class", "y axis")
+                   .call(yAxis);
 
                 slider = svg.append("g")
                                 .attr("class", "slider")
-                                .call(brush);
+                                .call(brush)
+                                .selectAll("rect")
+                                .attr("y", -6)
+                                .attr("height", height + 7);
 
-                slider.selectAll(".extent,.resize")
-                      .remove();
-
-                slider.select(".background")
-                      .attr("height", height);
-
-                handle = slider.append("circle")
-                                   .attr("class", "handle")
-                                   .attr("transform", "translate(0," + height / 2 + ")")
-                                   .attr("r", 9);
-        
                 initialize_map();
                 //make Update button visible
                 document.getElementById("submit").type = "submit";
@@ -148,20 +173,39 @@
         }
         
         function brushed() {
-            var value = brush.extent()[0];
-
-            if (d3.event.sourceEvent) { // not a programmatic event
-                value = x.invert(d3.mouse(this)[0]);
-                brush.extent([value, value]);
-            }
-            if (filter_date.getTime() < value.getTime())
-                add_points_to_map(value);
             
-            if (filter_date.getTime() > value.getTime())
-                remove_points_from_map(value);
+            var brush_start = brush.extent()[0];
+            var brush_end = brush.extent()[1];
+            var brush_t;
+           
+            if (brush_start.getTime() > brush_end.getTime()) {
+                 brush_t = brush_start;
+                 brush_start = brush_end;
+                 brush_end = brush_t;
+            }
+
+            //if (d3.event.sourceEvent) { // not a programmatic event
+            //    value = x.invert(d3.mouse(this)[0]);
+            //    brush.extent([value, value]);
+            //}
+
+            var brush_start_position = get_position_of_date(brush_start, crt_data_rows);
+            var brush_end_position = get_position_of_date(brush_end, crt_data_rows);
+
+            // remove points
+            heatmap_data.clear()
+
+            // add the points in the new slider
+            add_points_to_map(brush_start_position, brush_end_position);             
+
+            //if (filter_start_date.getTime() < brush_start.getTime())
+            //    remove_points_from_map(brush_start);
+            
+            //if (filter_date.getTime() > value.getTime())
+            //    remove_points_from_map(value);
     
-            filter_date = value;
-            handle.attr("cx", x(value));
+            //filter_date = value;
+            //handle.attr("cx", x(value));
             //d3.select("body").style("background-color", d3.hsl(value, .8, .8));
         }
 
@@ -170,21 +214,40 @@
             var end_date_t = new Date(document.getElementById('end_date').value);
             var time_granularity_t = document.getElementById("time_granularity").value;
 
-            get_points(start_date_t, end_date_t);
-            console.log("Got " + crt_data_rows.length);
-            get_points_by_granularity(time_granularity_t);
+            if ((start_date_t.getTime() != start_date.getTime())
+                   || (end_date_t.getTime() != end_date.getTime())) {
+                // compute the new points between start and end dates 
+                get_points(start_date_t, end_date_t);
+                total_positions = crt_data_rows.length;
+                crt_start_position = total_positions - 1;
+                crt_end_position = 0;
+                // compute the new values on the bar plot
+                get_points_by_granularity(time_granularity_t);
+                // update the bar plot
+                update_slider();
+            } else if (time_granularity_t != time_granularity) {
+                // compute the new values on the bar plot
+                get_points_by_granularity(time_granularity_t);
+                // update the bar plot
+                update_slider(); 
+            }
+
+            start_date = start_date_t;
+            end_date = end_date_t;
+
+            filter_start_date = start_date;
+            filter_end_date = end_date;
+
+            time_granularity = time_granularity_t;
         }
 
         //avoid too many comparisons - break into multiple whiles
         function get_points(start_date_t, end_date_t) {
             var pos = 0;           
-            
             while((pos < total_positions) && (data_rows[pos]["Event Clearance Date"].getTime() > end_date_t.getTime())) {
                 pos++;
             }
-
             crt_data_rows = [];
-            
             while((pos < total_positions) && (data_rows[pos]["Event Clearance Date"].getTime() >= start_date_t.getTime())) {
                 crt_data_rows.push(data_rows[pos]);
                 pos++;
@@ -195,36 +258,93 @@
             var g;
             switch (granularity_t) {
                 case "day":
-                    g = function(d){d_t = d["Event Clearance Date"]; return new Date(d_t.getFullYear(), d_t.getMonth(), d_t.getDate());};
+                    g = function(d){d_t = d["Event Clearance Date"];
+                                    dt = new Date(d_t.getFullYear(), d_t.getMonth(), d_t.getDate());
+                                    if (dt.getTime() > end_date.getTime())
+                                        return end_date;
+                                    if (dt.getTime() < start_date.getTime())
+                                        return start_date;
+                                    return dt};
                     break;
                 case "month":
-                    g = function(d){d_t = d["Event Clearance Date"]; return new Date(d_t.getFullYear(), d_t.getMonth());};
+                    g = function(d){d_t = d["Event Clearance Date"];
+                                    dt = new Date(d_t.getFullYear(), d_t.getMonth());
+                                    if (dt.getTime() > end_date.getTime())
+                                        return end_date;
+                                    if (dt.getTime() < start_date.getTime())
+                                        return start_date;
+                                    return dt};
                     break;
-                case "year":
-                    g = function(d){d_t = d["Event Clearance Date"]; return d_t.getFullYear();};
+                case "hour":
+                    g = function(d){d_t = d["Event Clearance Date"]; return d_t;};
             }
-            console.log(g);
             crt_sum_points = d3.nest()
                                .key(g) // `GROUP BY date`
                                .rollup(function(values){
                                            return values.length;})
                                .entries(crt_data_rows);
-            console.log(crt_sum_points);
         }
 
-        function add_points_to_map(date_value) {
-           while((crt_position > 0) && (data_rows[crt_position]["Event Clearance Date"].getTime() <= date_value.getTime())) {
-               heatmap_data.push(new google.maps.LatLng(data_rows[crt_position]["Latitude"], data_rows[crt_position]["Longitude"]));
-               crt_position--;
+  
+        function get_position_of_date(searched_element, date_array) {
+             var i = 0;
+             var l = date_array.length - 1;
+             while(i <= l && date_array[i]["Event Clearance Date"].getTime() > searched_element.getTime())
+                 i++;
+             return i;
+        }
+
+        function update_slider() {
+             // set x & y domains
+             x.domain(d3.extent(crt_data_rows, function(d){return d["Event Clearance Date"];}));
+             y.domain(d3.extent(crt_sum_points, function(d){return d.values}));
+            
+             var svg = d3.select("#slider").transition();
+         
+             svg.select(".area")   // change the line
+                .duration(750)
+                .attr("d", area(crt_sum_points));
+          
+             svg.select(".x.axis") // change the x axis
+                .duration(750)
+                .call(xAxis);
+
+             svg.select(".y.axis") // change the y axis
+                .duration(750)
+                .call(yAxis);
+             
+             brush.clear();
+             brush.extent([crt_data_rows[total_positions - 1]["Event Clearance Date"], crt_data_rows[total_positions - 1]["Event Clearance Date"]]);
+             svg.select(".slider") // update slider
+                .duration(750)
+                .call(brush);
+
+             filter_date = new Date("1960-01-01");
+
+             heatmap_data.clear();
+        }
+ 
+        //function add_points_to_map(date_value) {
+        //   while((crt_position > 0) && (crt_data_rows[crt_position]["Event Clearance Date"].getTime() <= date_value.getTime())) {
+        //       heatmap_data.push(new google.maps.LatLng(crt_data_rows[crt_position]["Latitude"], crt_data_rows[crt_position]["Longitude"]));
+        //       crt_position--;
+        //   }
+        //}
+
+        function add_points_to_map(start_position, end_position) {
+           while(start_position >= end_position) {
+               heatmap_data.push(new google.maps.LatLng(crt_data_rows[start_position]["Latitude"], crt_data_rows[start_position]["Longitude"]));
+               start_position--;
            }
         }
  
-        function remove_points_from_map(date_value) {
-           while((crt_position < total_positions - 1) && (data_rows[crt_position]["Event Clearance Date"].getTime() >= date_value.getTime())) {
-               heatmap_data.pop();
-               crt_position++;
-           }
-        }
+        //function remove_points_from_map(date_value_start) {
+        //   while((crt_position < total_positions - 1)
+        //           && (crt_data_rows[crt_position]["Event Clearance Date"].getTime() >= date_value_start.getTime())) {
+        //       heatmap_data.pop();
+        //       crt_position++;
+        //   }
+        //}
 
         function generate_points(data_rows, filter) {
             //distress_calls_data = [];
@@ -314,9 +434,9 @@
 	  		    <input type="text" id="end_date" name = "End date" maxlength="25" size="25"><a href="javascript:NewCal('end_date','ddmmmyyyy',true,24)"><img src="images/cal.gif" width="16" height="16" border="0" alt="Pick a date"></a><br>
                             Ticks:
                             <select name="time_granularity" id="time_granularity">
-                                <option value="day">Day</option>
-                                <option value="month" selected>Month</option>
-                                <option value="year">Year</option>
+                                <option value="hour">Hour</option>
+                                <option value="day" >Day</option>
+                                <option value="month" selected > Month</option>
                             </select>
                             <br><br>
                             Show only:
