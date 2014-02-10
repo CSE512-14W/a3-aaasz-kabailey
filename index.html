@@ -107,7 +107,7 @@
                 
 
         window.onload = function () {
-            d3.csv("data_100000.csv", parse_types, function(error, data) {
+            d3.csv("data_200000.csv", parse_types, function(error, data) {
                 data_rows = data;
                 
                 var limits = d3.extent(data_rows, function(d) { return d["Event Clearance Date"]; });
