@@ -78,7 +78,6 @@
         // info about the current choices in displaying the data
         var start_date;
         var end_date;
-        var granularity;
         var crt_data_rows;
         var crt_sum_points;
         //
@@ -212,8 +211,6 @@
         function update() {
             var start_date_t = new Date(document.getElementById('start_date').value);
             var end_date_t = new Date(document.getElementById('end_date').value);
-            var time_granularity_t = document.getElementById("time_granularity").value;
-            
 
             if ((start_date_t.getTime() != start_date.getTime())
                    || (end_date_t.getTime() != end_date.getTime())) {
@@ -224,22 +221,32 @@
                 total_positions = data_rows.length;
                 crt_start_position = total_positions - 1;
                 crt_end_position = 0;
+
                 // compute the new values on the bar plot
-                get_points_by_granularity(time_granularity_t);
+                get_points_by_granularity(get_time_granularity());
+                
                 // update the bar plot
                 update_slider();
-            } else if (time_granularity_t != time_granularity) {
-                // compute the new values on the bar plot
-                get_points_by_granularity(time_granularity_t);
-                // update the bar plot
-                update_slider(); 
             }
-
 
             filter_start_date = start_date;
             filter_end_date = end_date;
+        }
+ 
+        function get_time_granularity() {
+                // compute the "right" granularity
+                var msPerDay = 1000*60*60*24;
+                var no_days_between = ((end_date - start_date) / msPerDay).toFixed(0);
+                var time_granularity;
 
-            time_granularity = time_granularity_t;
+                if (no_days_between < 5)
+                    time_granularity = "hour";
+                else if (no_days_between < 60)
+                    time_granularity = "day";
+                else
+                    time_granularity = "month";
+   
+                return time_granularity;
         }
 
         //avoid too many comparisons - break into multiple whiles
@@ -436,12 +443,6 @@
 	  		    <br>
                             End date:<br>
 	  		    <input type="text" id="end_date" name = "End date" maxlength="25" size="25"><a href="javascript:NewCal('end_date','ddmmmyyyy',true,24)"><img src="images/cal.gif" width="16" height="16" border="0" alt="Pick a date"></a><br>
-                            Ticks:
-                            <select name="time_granularity" id="time_granularity">
-                                <option value="hour">Hour</option>
-                                <option value="day" >Day</option>
-                                <option value="month" selected > Month</option>
-                            </select>
                             <br><br>
                             <input type="hidden" name="Submit" id="submit" value="Update" />
                         </form>
