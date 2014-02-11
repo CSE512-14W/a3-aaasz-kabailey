@@ -209,8 +209,24 @@
         }
 
         function update() {
+            
+            var sd = document.getElementById('start_date').value;
+            var ed = document.getElementById('end_date').value;
+
+            if (sd === "") return;
+            if (ed === "") return;
+
             var start_date_t = new Date(document.getElementById('start_date').value);
             var end_date_t = new Date(document.getElementById('end_date').value);
+
+            if (end_date_t.getTime() < start_date.getTime())
+                return;
+            
+            if (start_date_t.getTime() > end_date.getTime())
+                return;
+
+            if (start_date_t.getTime() > end_date_t.getTime())
+                return;
 
             if ((start_date_t.getTime() != start_date.getTime())
                    || (end_date_t.getTime() != end_date.getTime())) {
@@ -286,17 +302,12 @@
                 case "hour":
                     g = function(d){d_t = d["Event Clearance Date"]; return d_t;};
             }
-            console.log(crt_data_rows.length);
-            console.log(data_rows.length);
             crt_sum_points = d3.nest()
                                .key(g) // `GROUP BY date`
                                .rollup(function(values){
                                            return values.length;})
                                .entries(crt_data_rows);
-            console.log(data_rows.length);
-            console.log(crt_data_rows.length);
         }
-
   
         function get_position_of_date(searched_element, date_array) {
              var i = 0;
@@ -438,6 +449,7 @@
                                 <button onclick="changeOpacity()">Change opacity</button>
 	  		    <br><br><br><br>
 	  		    <br><br><br><br>
+                            Pick the time interval you are interested in exploring. Then brush on the resulting graph below and see the location of the 911 calls on the map to the left. (Note: The data we used covers the interval 27-April-2013 to 5-Feb-2014) <br><br> 
                             Start date:<br>
 	  		    <input type="text" id="start_date" name = "Start date" maxlength="25" size="25"><a href="javascript:NewCal('start_date','ddmmmyyyy',true,24)"><img src="images/cal.gif" width="16" height="16" border="0" alt="Pick a date"></a><br>
 	  		    <br>
