@@ -221,7 +221,7 @@
                 start_date = start_date_t;
                 end_date = end_date_t;
                 get_points(start_date_t, end_date_t);
-                total_positions = crt_data_rows.length;
+                total_positions = data_rows.length;
                 crt_start_position = total_positions - 1;
                 crt_end_position = 0;
                 // compute the new values on the bar plot
@@ -319,7 +319,7 @@
                 .call(yAxis);
              
              brush.clear();
-             brush.extent([crt_data_rows[total_positions - 1]["Event Clearance Date"], crt_data_rows[total_positions - 1]["Event Clearance Date"]]);
+//             brush.extent([crt_data_rows[total_positions - 1]["Event Clearance Date"], crt_data_rows[total_positions - 1]["Event Clearance Date"]]);
              svg.select(".slider") // update slider
                 .duration(750)
                 .call(brush);
